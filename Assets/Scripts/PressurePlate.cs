@@ -27,6 +27,7 @@ public class PressurePlate : MonoBehaviour
     // Called when the player steps onto the pressure plate trigger.
     private void OnTriggerEnter(Collider other)
     {
+        Debug.Log("Trigger entered by: " + other.name);
         if (other.CompareTag("Player"))
         {
             if (!isUsed)

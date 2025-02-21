@@ -9,10 +9,13 @@ public class PlayerController : MonoBehaviour
     public float speed = 5f;
     public float jumpForce = 5f;
 
+    public Transform groundCheck;
+    public float groundCheckRadius = 0.2f;
+    public LayerMask groundLayer;
+
     private Rigidbody rb;
     private Vector2 moveInput;
     private bool jumpRequested;
-    private bool isGrounded;
 
 
     private PlayerInputActions inputActions;
@@ -50,6 +53,20 @@ public class PlayerController : MonoBehaviour
         rb.constraints = RigidbodyConstraints.FreezeRotation;
     }
 
+    private void FixedUpdate()
+    {
+        // Apply movement in world space.
+        Vector3 move = new Vector3(moveInput.x, 0f, moveInput.y);
+        rb.MovePosition(rb.position + move * speed * Time.fixedDeltaTime);
+
+        // Check if the jump input was triggered and the player is grounded.
+        if (jumpRequested && IsGrounded())
+        {
+            rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+            jumpRequested = false;
+        }
+    }
+
     // Called when the Move action is performed
     private void OnMovePerformed(InputAction.CallbackContext context)
     {
@@ -65,44 +82,11 @@ public class PlayerController : MonoBehaviour
     // Called when the Jump action is performed
     private void OnJumpPerformed(InputAction.CallbackContext context)
     {
-        // Only allow jump if the player is grounded
-        if (isGrounded)
-        {
-            jumpRequested = true;
-        }
+        jumpRequested = true;
     }
 
-    private void FixedUpdate()
+    private bool IsGrounded()
     {
-        // Calculate the movement vector relative to the player's orientation
-        Vector3 move = new Vector3(moveInput.x, 0f, moveInput.y);
-        Vector3 moveDirection = transform.TransformDirection(move);
-
-        // Move the player using Rigidbody
-        rb.MovePosition(rb.position + moveDirection * speed * Time.fixedDeltaTime);
-
-        // Process the jump request
-        if (jumpRequested && isGrounded)
-        {
-            rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
-            jumpRequested = false;
-        }
-    }
-
-    // Simple ground detection using collisions
-    private void OnCollisionEnter(Collision collision)
-    {
-        if (collision.gameObject.CompareTag("Ground"))
-        {
-            isGrounded = true;
-        }
-    }
-
-    private void OnCollisionExit(Collision collision)
-    {
-        if (collision.gameObject.CompareTag("Ground"))
-        {
-            isGrounded = false;
-        }
+        return Physics.CheckSphere(groundCheck.position, groundCheckRadius, groundLayer);
     }
 }
