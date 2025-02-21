@@ -2,6 +2,8 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Processors;
+using UnityEngine.SceneManagement;
 
 public class PlayerController : MonoBehaviour
 {
@@ -16,6 +18,7 @@ public class PlayerController : MonoBehaviour
     private Rigidbody rb;
     private Vector2 moveInput;
     private bool jumpRequested;
+    private bool isDead = false;
 
 
     private PlayerInputActions inputActions;
@@ -53,8 +56,19 @@ public class PlayerController : MonoBehaviour
         rb.constraints = RigidbodyConstraints.FreezeRotation;
     }
 
+    private void Update()
+    {
+        if(!isDead && transform.position.y < -3f)
+        {
+            StartCoroutine(DieAndRestart());
+        }
+    }
+
     private void FixedUpdate()
     {
+        if (isDead)
+            return;
+
         // Apply movement in world space.
         Vector3 move = new Vector3(moveInput.x, 0f, moveInput.y);
         rb.MovePosition(rb.position + move * speed * Time.fixedDeltaTime);
@@ -88,5 +102,33 @@ public class PlayerController : MonoBehaviour
     private bool IsGrounded()
     {
         return Physics.CheckSphere(groundCheck.position, groundCheckRadius, groundLayer);
+    }
+
+    // Coroutine that handles the death sequence and scene reload.
+    private IEnumerator DieAndRestart()
+    {
+        isDead = true;
+
+        // Change the player's color to pink.
+        Renderer rend = GetComponent<Renderer>();
+        if (rend != null)
+        {
+            rend.material.color = Color.magenta;
+        }
+
+        // Freeze the player's movement.
+        if (rb != null)
+        {
+            rb.velocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.useGravity = false;
+            rb.isKinematic = true;
+        }
+
+        // Wait for 2 seconds before reloading the scene.
+        yield return new WaitForSeconds(1.5f);
+
+        // Reload the current scene.
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 }
