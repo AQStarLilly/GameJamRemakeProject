@@ -39,6 +39,13 @@ public class ClonePlate : MonoBehaviour
 
                 // Prevent the clone from having this script (so it never triggers the plate)
                 Destroy(playerClone.GetComponent<ClonePlate>());
+
+
+                DynamicCamera cameraScript = Camera.main.GetComponent<DynamicCamera>();
+                if (cameraScript != null)
+                {
+                    cameraScript.SetClone(playerClone.transform);
+                }
             }
             else
             {
