@@ -4,9 +4,9 @@ using UnityEngine;
 
 public class ClonePlate : MonoBehaviour
 {
-    private static bool hasCloned = false; //  Tracks if a clone exists
-    private Renderer rend; //  Stores the renderer for color changes
-    private Color originalColor; //  Stores the plate's initial color
+    private static bool hasCloned = false; // Tracks if a clone exists
+    private Renderer rend; // Stores the renderer for color changes
+    private Color originalColor; // Stores the plate's initial color
 
     private void Start()
     {
@@ -24,9 +24,8 @@ public class ClonePlate : MonoBehaviour
 
         //  Allow cloning ONLY if:
         // - No clone exists OR
-        // - Only one player remains OR
-        // - The only remaining character is a clone (turn it into a real player)
-        if (!hasCloned && (isOriginalPlayer || (isClone && PlayerController.GetActivePlayerCount() == 1)))
+        // - Only one **active** (not frozen) player remains (even if it's a clone)
+        if (!hasCloned && (isOriginalPlayer || isClone && GetActiveNonFrozenPlayerCount() == 1))
         {
             hasCloned = true;  //  Mark cloning as used
             ChangeAllPlatesColor(Color.gray);  //  Turn all plates grey
@@ -48,30 +47,28 @@ public class ClonePlate : MonoBehaviour
             // If a valid target plate exists, create the new player or clone
             if (targetPlate != null)
             {
-                //  If the original player is gone, promote the clone to a real player
-                if (isClone && PlayerController.GetActivePlayerCount() == 1)
+                //  If the only remaining player is a clone, promote it to a real player
+                if (isClone && GetActiveNonFrozenPlayerCount() == 1)
                 {
                     other.tag = "Player";  //  Convert clone to player
                     PlayerController.UpdateActivePlayers();
                 }
-                else
+
+                // Create a new clone at the other pressure plate
+                GameObject playerClone = Instantiate(other.gameObject, targetPlate.position, targetPlate.rotation);
+                playerClone.name = "PlayerClone";  // Rename for debugging
+
+                // Change tag so the clone never activates a pressure plate initially
+                playerClone.tag = "PlayerClone";
+
+                // Prevent the clone from having this script (so it never triggers the plate)
+                Destroy(playerClone.GetComponent<ClonePlate>());
+
+                //  Update the camera to track both player and clone
+                DynamicCamera cameraScript = Camera.main.GetComponent<DynamicCamera>();
+                if (cameraScript != null)
                 {
-                    //  Create a new clone at the other pressure plate
-                    GameObject playerClone = Instantiate(other.gameObject, targetPlate.position, targetPlate.rotation);
-                    playerClone.name = "PlayerClone";  // Rename for debugging
-
-                    // Change tag so the clone never activates a pressure plate initially
-                    playerClone.tag = "PlayerClone";
-
-                    // Prevent the clone from having this script (so it never triggers the plate)
-                    Destroy(playerClone.GetComponent<ClonePlate>());
-
-                    //  Update the camera to track both player and clone
-                    DynamicCamera cameraScript = Camera.main.GetComponent<DynamicCamera>();
-                    if (cameraScript != null)
-                    {
-                        cameraScript.SetClone(playerClone.transform);
-                    }
+                    cameraScript.SetClone(playerClone.transform);
                 }
             }
             else
@@ -81,14 +78,28 @@ public class ClonePlate : MonoBehaviour
         }
     }
 
-    //  Reactivate the clone plates when only one player remains
+    // Reactivate the clone plates when only **one active (non-frozen)** player remains
     public static void ResetCloneAvailability()
     {
-        if (PlayerController.GetActivePlayerCount() == 1)
+        if (GetActiveNonFrozenPlayerCount() == 1)
         {
             hasCloned = false;  //  Allow cloning again
             ChangeAllPlatesColorToOriginal();  //  Reset colors of all plates
         }
+    }
+
+    //  NEW: Get only **non-frozen** active players
+    private static int GetActiveNonFrozenPlayerCount()
+    {
+        int count = 0;
+        foreach (PlayerController player in FindObjectsOfType<PlayerController>())
+        {
+            if (!player.IsFrozen()) //  Ignores frozen players
+            {
+                count++;
+            }
+        }
+        return count;
     }
 
     //  Change all plates to a specific color

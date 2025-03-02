@@ -105,6 +105,10 @@ public class PlayerController : MonoBehaviour
     {
         return Physics.CheckSphere(groundCheck.position, groundCheckRadius, groundLayer);
     }
+    public bool IsFrozen()
+    {
+        return isDead;
+    }
 
     public static int GetActivePlayerCount()
     {
