@@ -189,4 +189,77 @@ public class PlayerController : MonoBehaviour
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
     }
+
+    private IEnumerator DieFromLaser()
+    {
+        isDead = true;
+
+        //  Change color to indicate they were hit
+        Renderer rend = GetComponent<Renderer>();
+        if (rend != null)
+        {
+            rend.material.color = Color.blue;  // Change to blue to show they are frozen
+        }
+
+        //  Freeze movement and physics
+        if (rb != null)
+        {
+            rb.velocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.useGravity = false;
+            rb.isKinematic = true; //  Prevents movement but keeps collisions
+        }
+
+        //  Remove from active players
+        if (allPlayers.Contains(this))
+        {
+            allPlayers.Remove(this);
+        }
+
+        //  Reactivate clone plates if only one player remains. Might need this later
+        ClonePlate.ResetCloneAvailability();
+
+        //  If only one player is left, switch control
+        if (allPlayers.Count == 1)
+        {
+            PlayerController newPlayer = allPlayers[0];
+            if (cameraScript != null)
+            {
+                cameraScript.SwitchToNewTarget(newPlayer.transform);
+            }
+        }
+        else if (allPlayers.Count == 0)
+        {
+            //  If both players freeze, restart the level
+            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        }
+
+        //  Disable input so the player can't move after freezing
+        DisableInput();
+
+        yield break; //  Exit the coroutine properly
+    }
+
+    //  Prevents player from accepting movement input
+    private void DisableInput()
+    {
+        inputActions.Player.Disable();
+    }
+
+    public void HandleLaserDeath()
+    {
+        if (!isDead)
+        {
+            StartCoroutine(DieFromLaser());
+        }
+    }
+
+    public static void RemovePlayer(GameObject player)
+    {
+        PlayerController playerScript = player.GetComponent<PlayerController>();
+        if (playerScript != null && allPlayers.Contains(playerScript))
+        {
+            allPlayers.Remove(playerScript);
+        }
+    }
 }
