@@ -37,9 +37,15 @@ public class DynamicCamera : MonoBehaviour
     {
         if (player == null) return; // Ensure the player exists
 
+        //  If the current player is frozen, switch to the other character
+        if (player.GetComponent<PlayerController>()?.IsFrozen() == true)
+        {
+            SwitchToNewTarget(GetRemainingActivePlayer());
+        }
+
         Vector3 targetPosition;
 
-        if (clone != null)
+        if (clone != null && !clone.GetComponent<PlayerController>().IsFrozen())
         {
             //  Get the midpoint between the player & clone
             Vector3 midpoint = (player.position + clone.position) / 2f;
@@ -68,10 +74,27 @@ public class DynamicCamera : MonoBehaviour
         transform.rotation = initialRotation; // Ensures the camera never rotates
     }
 
+    //  Switches camera to a new player when one dies/freezes
     public void SwitchToNewTarget(Transform newTarget)
     {
-        player = newTarget; // Set the new player as the camera target
-        clone = null; // Remove the clone reference to prevent midpoint tracking
+        if (newTarget != null)
+        {
+            player = newTarget; // Set the new player as the camera's target
+            clone = null; // Remove the clone reference to prevent midpoint tracking
+        }
+    }
+
+    //  Finds the last remaining active (non-frozen) player
+    private Transform GetRemainingActivePlayer()
+    {
+        foreach (PlayerController pc in FindObjectsOfType<PlayerController>())
+        {
+            if (!pc.IsFrozen()) //  Ignore frozen players
+            {
+                return pc.transform;
+            }
+        }
+        return null; // If no active player remains, return null
     }
 
     //  Called when a clone is created
