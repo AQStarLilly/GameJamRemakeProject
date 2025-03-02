@@ -2,12 +2,10 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.Processors;
 using UnityEngine.SceneManagement;
 
 public class PlayerController : MonoBehaviour
 {
-
     public float speed = 5f;
     public float jumpForce = 5f;
 
@@ -20,8 +18,10 @@ public class PlayerController : MonoBehaviour
     private bool jumpRequested;
     private bool isDead = false;
 
-
     private PlayerInputActions inputActions;
+
+    private static List<PlayerController> allPlayers = new List<PlayerController>(); // Stores all active players
+    private static DynamicCamera cameraScript; // Reference to the camera script
 
     private void Awake()
     {
@@ -32,42 +32,47 @@ public class PlayerController : MonoBehaviour
     {
         inputActions.Player.Enable();
 
-        // Subscribe to input events with named methods
         inputActions.Player.Move.performed += OnMovePerformed;
         inputActions.Player.Move.canceled += OnMoveCanceled;
         inputActions.Player.Jump.performed += OnJumpPerformed;
+
+        allPlayers.Add(this); // Register this player/clone
     }
 
     private void OnDisable()
     {
-        // Unsubscribe from input events
         inputActions.Player.Move.performed -= OnMovePerformed;
         inputActions.Player.Move.canceled -= OnMoveCanceled;
         inputActions.Player.Jump.performed -= OnJumpPerformed;
 
-        // Disable the action map
         inputActions.Player.Disable();
+
+        allPlayers.Remove(this); // Remove from active players list when destroyed
     }
 
     private void Start()
     {
         rb = GetComponent<Rigidbody>();
-
         rb.constraints = RigidbodyConstraints.FreezeRotation;
+
+        // Assign camera reference if it hasn't been set yet
+        if (cameraScript == null)
+        {
+            cameraScript = Camera.main.GetComponent<DynamicCamera>();
+        }
     }
 
     private void Update()
     {
-        if(!isDead && transform.position.y < -3f)
+        if (!isDead && transform.position.y < -3f)
         {
-            StartCoroutine(DieAndRestart());
+            StartCoroutine(DieAndSwitchControl());
         }
     }
 
     private void FixedUpdate()
     {
-        if (isDead)
-            return;
+        if (isDead) return;
 
         // Apply movement in world space.
         Vector3 move = new Vector3(moveInput.x, 0f, moveInput.y);
@@ -81,19 +86,16 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    // Called when the Move action is performed
     private void OnMovePerformed(InputAction.CallbackContext context)
     {
         moveInput = context.ReadValue<Vector2>();
     }
 
-    // Called when the Move action is canceled
     private void OnMoveCanceled(InputAction.CallbackContext context)
     {
         moveInput = Vector2.zero;
     }
 
-    // Called when the Jump action is performed
     private void OnJumpPerformed(InputAction.CallbackContext context)
     {
         jumpRequested = true;
@@ -104,8 +106,24 @@ public class PlayerController : MonoBehaviour
         return Physics.CheckSphere(groundCheck.position, groundCheckRadius, groundLayer);
     }
 
-    // Coroutine that handles the death sequence and scene reload.
-    private IEnumerator DieAndRestart()
+    public static int GetActivePlayerCount()
+    {
+        return allPlayers.Count; //  Returns how many players/clones exist
+    }
+
+    public static void UpdateActivePlayers()
+    {
+        allPlayers.Clear();
+        PlayerController[] players = FindObjectsOfType<PlayerController>();
+        foreach (PlayerController player in players)
+        {
+            allPlayers.Add(player);
+        }
+    }
+
+
+    // Coroutine that handles the death sequence and control switch.
+    private IEnumerator DieAndSwitchControl()
     {
         isDead = true;
 
@@ -125,10 +143,50 @@ public class PlayerController : MonoBehaviour
             rb.isKinematic = true;
         }
 
-        // Wait for 2 seconds before reloading the scene.
-        yield return new WaitForSeconds(1.5f);
+        // Slowly fade out the player
+        float fadeDuration = 1.5f;
+        float elapsedTime = 0f;
+        Color initialColor = rend.material.color;
 
-        // Reload the current scene.
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        while (elapsedTime < fadeDuration)
+        {
+            elapsedTime += Time.deltaTime;
+            float alpha = Mathf.Lerp(1f, 0f, elapsedTime / fadeDuration);
+            rend.material.color = new Color(initialColor.r, initialColor.g, initialColor.b, alpha);
+            yield return null;
+        }
+
+        // Remove this player from the active list
+        allPlayers.Remove(this);
+
+        //  Reactivate clone plates if only one player remains
+        ClonePlate.ResetCloneAvailability();
+
+        //  If only a clone is left, promote it to the main player
+        if (allPlayers.Count == 1 && allPlayers[0].CompareTag("PlayerClone"))
+        {
+            allPlayers[0].tag = "Player";  //  Convert clone to player
+            PlayerController.UpdateActivePlayers();
+        }
+
+        // If there are remaining players, switch control to them
+        if (allPlayers.Count > 0)
+        {
+            PlayerController newPlayer = allPlayers[0]; // Pick the first remaining player
+
+            // Switch camera to follow the new player
+            if (cameraScript != null)
+            {
+                cameraScript.SwitchToNewTarget(newPlayer.transform);
+            }
+
+            // Destroy the dead player
+            Destroy(gameObject);
+        }
+        else
+        {
+            // No players left, restart the scene
+            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        }
     }
 }

@@ -68,6 +68,12 @@ public class DynamicCamera : MonoBehaviour
         transform.rotation = initialRotation; // Ensures the camera never rotates
     }
 
+    public void SwitchToNewTarget(Transform newTarget)
+    {
+        player = newTarget; // Set the new player as the camera target
+        clone = null; // Remove the clone reference to prevent midpoint tracking
+    }
+
     //  Called when a clone is created
     public void SetClone(Transform newClone)
     {
