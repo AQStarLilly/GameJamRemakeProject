@@ -266,4 +266,50 @@ public class PlayerController : MonoBehaviour
             allPlayers.Remove(playerScript);
         }
     }
+
+
+    public void HandleInstantDeath()
+    {
+        if (!isDead)
+        {
+            StartCoroutine(DieInstantly());
+        }
+    }
+
+    private IEnumerator DieInstantly()
+    {
+        isDead = true;
+
+        //  Change color to indicate they were vaporized
+        Renderer rend = GetComponent<Renderer>();
+        if (rend != null)
+        {
+            rend.material.color = Color.red;  //  Change to red for instant kill
+        }
+
+        //  Remove from active players
+        allPlayers.Remove(this);
+
+        //  Reactivate clone plates if only one player remains
+        ClonePlate.ResetCloneAvailability();
+
+        //  If only one player is left, switch control
+        if (allPlayers.Count == 1)
+        {
+            PlayerController newPlayer = allPlayers[0];
+            if (cameraScript != null)
+            {
+                cameraScript.SwitchToNewTarget(newPlayer.transform);
+            }
+
+            Destroy(gameObject); //  Remove the dead player from the scene
+        }
+        else if (allPlayers.Count == 0)
+        {
+            // If both players die, restart the level
+            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        }
+
+        yield break; //  Ensures coroutine exits properly
+    }
 }
