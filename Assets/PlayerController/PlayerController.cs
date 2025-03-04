@@ -284,7 +284,7 @@ public class PlayerController : MonoBehaviour
         Renderer rend = GetComponent<Renderer>();
         if (rend != null)
         {
-            rend.material.color = Color.red;  //  Change to red for instant kill
+            rend.material.color = Color.magenta;  //  Change to magenta for instant kill
         }
 
         //  Remove from active players
