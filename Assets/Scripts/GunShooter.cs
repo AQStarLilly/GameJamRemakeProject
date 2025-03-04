@@ -3,35 +3,52 @@ using UnityEngine;
 
 public class GunShooter : MonoBehaviour
 {
-    [Header("Bullet Settings")]
-    public Transform firePoint;      //  Point where bullets are spawned
-    public float bulletSpeed = 10f;  //  How fast bullets travel
-    public float fireRate = 0.3f;    //  Time between each bullet (within a burst)
-    public int bulletsPerBurst = 5;  //  Number of bullets per burst
+    public enum FireMode { Burst, Continuous } //  Choose between Burst or Continuous Mode
+    [Header("Shooting Mode")]
+    public FireMode fireMode = FireMode.Burst; //  Default to Burst Mode
 
-    [Header("Pause Settings")]
-    public float burstPauseTime = 2f; //  Time between bursts
+    [Header("Bullet Settings")]
+    public Transform firePoint;      // Point where bullets are spawned
+    public float bulletSpeed = 10f;  // How fast bullets travel
+    public float fireRate = 0.1f;    // Time between each bullet
+    public int bulletsPerBurst = 5;  // Number of bullets per burst
+
+    [Header("Pause Settings (Burst Mode Only)")]
+    public float burstPauseTime = 2f; // Time between bursts
 
     private void Start()
     {
-        StartCoroutine(ShootLoop());
-    }
-
-    private IEnumerator ShootLoop()
-    {
-        while (true)
+        //  Start the correct firing mode based on the selected option
+        if (fireMode == FireMode.Burst)
         {
-            yield return StartCoroutine(FireBurst());
-            yield return new WaitForSeconds(burstPauseTime);
+            StartCoroutine(ShootBurstMode());
+        }
+        else
+        {
+            StartCoroutine(ShootContinuousMode());
         }
     }
 
-    private IEnumerator FireBurst()
+    private IEnumerator ShootBurstMode()
     {
-        for (int i = 0; i < bulletsPerBurst; i++)
+        while (true) //  Keeps looping forever
+        {
+            for (int i = 0; i < bulletsPerBurst; i++)
+            {
+                ShootBullet();
+                yield return new WaitForSeconds(fireRate); //  Wait between each bullet
+            }
+
+            yield return new WaitForSeconds(burstPauseTime); //  Pause between bursts
+        }
+    }
+
+    private IEnumerator ShootContinuousMode()
+    {
+        while (true) //  Shoots nonstop
         {
             ShootBullet();
-            yield return new WaitForSeconds(fireRate);
+            yield return new WaitForSeconds(fireRate); //  No pause, just fire continuously
         }
     }
 
@@ -39,7 +56,7 @@ public class GunShooter : MonoBehaviour
     {
         if (firePoint == null) return;
 
-        // Get a bullet from the pool
+        //  Get a bullet from the pool
         GameObject bullet = BulletPool.Instance.GetBullet();
         bullet.transform.position = firePoint.position;
         bullet.transform.rotation = firePoint.rotation;
@@ -54,13 +71,13 @@ public class GunShooter : MonoBehaviour
         //  Ignore collision between bullet and shooter
         Physics.IgnoreCollision(bullet.GetComponent<Collider>(), firePoint.parent.GetComponent<Collider>(), true);
 
-        //  Return bullet to pool after 5 seconds if it doesn't hit anything
+        // Return bullet to pool after 5 seconds if it doesn't hit anything
         StartCoroutine(ReturnBulletToPool(bullet));
     }
 
     private IEnumerator ReturnBulletToPool(GameObject bullet)
     {
-        yield return new WaitForSeconds(5f); //  Bullet lifespan
+        yield return new WaitForSeconds(5f); // Bullet lifespan
         BulletPool.Instance.ReturnBullet(bullet);
     }
 }
