@@ -41,6 +41,8 @@ public class PlayerController : MonoBehaviour
         inputActions.Player.Move.canceled += OnMoveCanceled;
         inputActions.Player.Jump.performed += OnJumpPerformed;
 
+        SceneManager.sceneLoaded += ResetSceneChangingFlag;
+
         allPlayers.Add(this);
     }
 
@@ -49,6 +51,8 @@ public class PlayerController : MonoBehaviour
         inputActions.Player.Move.performed -= OnMovePerformed;
         inputActions.Player.Move.canceled -= OnMoveCanceled;
         inputActions.Player.Jump.performed -= OnJumpPerformed;
+
+        SceneManager.sceneLoaded -= ResetSceneChangingFlag;
 
         inputActions.Player.Disable();
 
@@ -253,10 +257,16 @@ public class PlayerController : MonoBehaviour
         yield break;
     }
 
-    private static bool isSceneChanging = false; // Prevents scene reset if a transition is happening
+    private static bool isSceneChanging = false;
 
     private static void CheckForRespawn()
     {
+        if (isSceneChanging)
+        {
+            Debug.Log("Scene is changing, skipping respawn check.");
+            return; //  If we're transitioning, don't reload the scene
+        }
+
         if (!isReloadingScene && allPlayers.Count == 0)
         {
             isReloadingScene = true;
@@ -265,10 +275,19 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    // Call this when transitioning to the next scene
+    //  Method to manually set scene transition status
     public static void SetSceneChanging(bool value)
     {
         isSceneChanging = value;
+        Debug.Log("Scene changing state set to: " + value);
+    }
+
+    //  Reset the scene-changing flag when a new scene loads
+    private static void ResetSceneChangingFlag(Scene scene, LoadSceneMode mode)
+    {
+        isSceneChanging = false;
+        isReloadingScene = false; //  Reset reload flag too
+        Debug.Log("New scene loaded. Resetting scene-changing state.");
     }
 
     public static void RemovePlayer(GameObject player)
