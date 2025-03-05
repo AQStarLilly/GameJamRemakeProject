@@ -15,6 +15,7 @@ public class FinishGoal : MonoBehaviour
         {
             isUsed = true;
 
+            PlayerController.SetSceneChanging(true);
             // Detach the camera from the finishing player/clone
             Camera mainCamera = Camera.main;
             if(mainCamera != null && mainCamera.transform.IsChildOf(other.transform))
@@ -37,6 +38,9 @@ public class FinishGoal : MonoBehaviour
         yield return new WaitForSeconds(waitTime);
 
         int nextSceneIndex = SceneManager.GetActiveScene().buildIndex + 1;
-        SceneManager.LoadScene(nextSceneIndex);
+        if (nextSceneIndex < SceneManager.sceneCountInBuildSettings)
+        {
+            SceneManager.LoadScene(nextSceneIndex);
+        }
     }
 }

@@ -17,14 +17,17 @@ public class PlayerController : MonoBehaviour
     private Vector2 moveInput;
     private bool jumpRequested;
     private bool isDead = false;
+    private bool isFrozen = false; // Track frozen state
 
     private PlayerInputActions inputActions;
 
-    private static List<PlayerController> allPlayers = new List<PlayerController>(); // Stores all active players
-    private static DynamicCamera cameraScript; // Reference to the camera script
+    private static List<PlayerController> allPlayers = new List<PlayerController>(); // Active players
+    private static DynamicCamera cameraScript;
 
-    private AudioSource footstepAudio; //  Footstep audio source
-    private bool isMoving = false; //  Tracks movement state
+    private AudioSource footstepAudio;
+    private bool isMoving = false;
+
+    private static bool isReloadingScene = false; // Prevent multiple scene reloads
 
     private void Awake()
     {
@@ -34,12 +37,11 @@ public class PlayerController : MonoBehaviour
     private void OnEnable()
     {
         inputActions.Player.Enable();
-
         inputActions.Player.Move.performed += OnMovePerformed;
         inputActions.Player.Move.canceled += OnMoveCanceled;
         inputActions.Player.Jump.performed += OnJumpPerformed;
 
-        allPlayers.Add(this); // Register this player/clone
+        allPlayers.Add(this);
     }
 
     private void OnDisable()
@@ -50,7 +52,8 @@ public class PlayerController : MonoBehaviour
 
         inputActions.Player.Disable();
 
-        allPlayers.Remove(this); // Remove from active players list when destroyed
+        allPlayers.Remove(this);
+        CheckForRespawn();
     }
 
     private void Start()
@@ -60,7 +63,6 @@ public class PlayerController : MonoBehaviour
 
         footstepAudio = GetComponent<AudioSource>();
 
-        // Assign camera reference if it hasn't been set yet
         if (cameraScript == null)
         {
             cameraScript = Camera.main.GetComponent<DynamicCamera>();
@@ -77,21 +79,15 @@ public class PlayerController : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (isDead) return;
+        if (isDead || isFrozen) return;
 
-        // Apply movement in world space.
         Vector3 move = new Vector3(moveInput.x, 0f, moveInput.y);
         rb.MovePosition(rb.position + move * speed * Time.fixedDeltaTime);
 
-        //  Play/Stop Footstep Sound Based on Movement
         bool isCurrentlyMoving = moveInput != Vector2.zero && IsGrounded();
-
         if (isCurrentlyMoving && !isMoving)
         {
-            if (!footstepAudio.isPlaying)
-            {
-                footstepAudio.Play();
-            }
+            if (!footstepAudio.isPlaying) footstepAudio.Play();
             isMoving = true;
         }
         else if (!isCurrentlyMoving && isMoving)
@@ -100,7 +96,6 @@ public class PlayerController : MonoBehaviour
             isMoving = false;
         }
 
-        // Check if the jump input was triggered and the player is grounded.
         if (jumpRequested && IsGrounded())
         {
             rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
@@ -130,53 +125,50 @@ public class PlayerController : MonoBehaviour
 
     public bool IsFrozen()
     {
-        return isDead;
+        return isFrozen;
     }
 
     public void ResetFrozenState()
     {
-        isDead = false; //  Make sure the player is active
-        GetComponent<Rigidbody>().isKinematic = false; //  Restore movement
+        isFrozen = false;
+        isDead = false;
 
+        //  Ensure Rigidbody exists before modifying
+        if (rb == null) rb = GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.isKinematic = false;
+        }
+
+        //  Ensure Renderer exists before modifying
         Renderer rend = GetComponent<Renderer>();
-        if (rend != null)
+        if (rend != null && rend.material != null)
         {
-            rend.material.color = Color.white; //  Reset color to default
+            rend.material.color = Color.white;
         }
 
-        //  Ensure movement input is re-enabled
-        inputActions.Player.Enable();
-    }
-
-    public static int GetActivePlayerCount()
-    {
-        return allPlayers.Count; //  Returns how many players/clones exist
-    }
-
-    public static void UpdateActivePlayers()
-    {
-        allPlayers.Clear();
-        PlayerController[] players = FindObjectsOfType<PlayerController>();
-        foreach (PlayerController player in players)
+        //  Re-enable input actions
+        if (inputActions != null)
         {
-            allPlayers.Add(player);
+            inputActions.Player.Enable();
+        }
+        else
+        {
+            Debug.LogWarning("InputActions is null on ResetFrozenState()");
         }
     }
 
-
-    // Coroutine that handles the death sequence and control switch.
     private IEnumerator DieAndSwitchControl()
     {
         isDead = true;
+        isFrozen = true; // Mark as frozen when dying
 
-        // Change the player's color to pink.
         Renderer rend = GetComponent<Renderer>();
         if (rend != null)
         {
             rend.material.color = Color.magenta;
         }
 
-        // Freeze the player's movement.
         if (rb != null)
         {
             rb.velocity = Vector3.zero;
@@ -185,7 +177,6 @@ public class PlayerController : MonoBehaviour
             rb.isKinematic = true;
         }
 
-        // Slowly fade out the player
         float fadeDuration = 1.5f;
         float elapsedTime = 0f;
         Color initialColor = rend.material.color;
@@ -198,70 +189,53 @@ public class PlayerController : MonoBehaviour
             yield return null;
         }
 
-        //  Remove this player from the active list
         allPlayers.Remove(this);
-
-        //  Ensure clone plates reactivate if the player is dead
         ClonePlate.HandleCloneDeath(gameObject);
 
-        //  If only a clone is left, promote it to the main player
         if (allPlayers.Count == 1 && allPlayers[0].CompareTag("PlayerClone"))
         {
-            allPlayers[0].tag = "Player";  //  Convert clone to player
-            PlayerController.UpdateActivePlayers();
+            allPlayers[0].tag = "Player";
         }
 
-        // If there are remaining players, switch control to them
         if (allPlayers.Count > 0)
         {
-            PlayerController newPlayer = allPlayers[0]; // Pick the first remaining player
+            PlayerController newPlayer = allPlayers[0];
 
-            // Switch camera to follow the new player
             if (cameraScript != null)
             {
                 cameraScript.SwitchToNewTarget(newPlayer.transform);
             }
 
-            // Destroy the dead player
             Destroy(gameObject);
         }
         else
         {
-            // No players left, restart the scene
-            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+            CheckForRespawn();
         }
     }
 
     private IEnumerator DieFromLaser()
     {
         isDead = true;
+        isFrozen = true;
 
-        //  Change color to indicate they were hit
         Renderer rend = GetComponent<Renderer>();
         if (rend != null)
         {
-            rend.material.color = Color.blue;  // Change to blue to show they are frozen
+            rend.material.color = Color.blue;
         }
 
-        //  Freeze movement and physics
         if (rb != null)
         {
             rb.velocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
             rb.useGravity = false;
-            rb.isKinematic = true; //  Prevents movement but keeps collisions
+            rb.isKinematic = true;
         }
 
-        //  Remove from active players
-        if (allPlayers.Contains(this))
-        {
-            allPlayers.Remove(this);
-        }
-
-        //  Reactivate clone plates if only one player remains. Might need this later
+        allPlayers.Remove(this);
         ClonePlate.ResetCloneAvailability();
 
-        //  If only one player is left, switch control
         if (allPlayers.Count == 1)
         {
             PlayerController newPlayer = allPlayers[0];
@@ -270,19 +244,43 @@ public class PlayerController : MonoBehaviour
                 cameraScript.SwitchToNewTarget(newPlayer.transform);
             }
         }
-        else if (allPlayers.Count == 0)
+        else
         {
-            //  If both players freeze, restart the level
-            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+            CheckForRespawn();
         }
 
-        //  Disable input so the player can't move after freezing
         DisableInput();
-
-        yield break; //  Exit the coroutine properly
+        yield break;
     }
 
-    //  Prevents player from accepting movement input
+    private static bool isSceneChanging = false; // Prevents scene reset if a transition is happening
+
+    private static void CheckForRespawn()
+    {
+        if (!isReloadingScene && allPlayers.Count == 0)
+        {
+            isReloadingScene = true;
+            Debug.Log("All players gone. Restarting level...");
+            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        }
+    }
+
+    // Call this when transitioning to the next scene
+    public static void SetSceneChanging(bool value)
+    {
+        isSceneChanging = value;
+    }
+
+    public static void RemovePlayer(GameObject player)
+    {
+        PlayerController playerScript = player.GetComponent<PlayerController>();
+        if (playerScript != null && allPlayers.Contains(playerScript))
+        {
+            allPlayers.Remove(playerScript);
+            CheckForRespawn(); // Ensure scene reload happens if needed
+        }
+    }
+
     private void DisableInput()
     {
         inputActions.Player.Disable();
@@ -296,16 +294,6 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    public static void RemovePlayer(GameObject player)
-    {
-        PlayerController playerScript = player.GetComponent<PlayerController>();
-        if (playerScript != null && allPlayers.Contains(playerScript))
-        {
-            allPlayers.Remove(playerScript);           
-        }
-    }
-
-
     public void HandleInstantDeath()
     {
         if (!isDead)
@@ -316,22 +304,18 @@ public class PlayerController : MonoBehaviour
 
     private IEnumerator DieInstantly()
     {
-        isDead = true; 
+        isDead = true;
+        isFrozen = true;
 
-        //  Change color to indicate they were vaporized
         Renderer rend = GetComponent<Renderer>();
         if (rend != null)
         {
-            rend.material.color = Color.magenta;  //  Change to magenta for instant kill
+            rend.material.color = Color.magenta;
         }
 
-        //  Remove from active players
         allPlayers.Remove(this);
-
-        //  Reactivate clone plates if only one player remains
         ClonePlate.HandleCloneDeath(gameObject);
 
-        //  If only one player is left, switch control
         if (allPlayers.Count == 1)
         {
             PlayerController newPlayer = allPlayers[0];
@@ -340,15 +324,13 @@ public class PlayerController : MonoBehaviour
                 cameraScript.SwitchToNewTarget(newPlayer.transform);
             }
 
-            Destroy(gameObject); //  Remove the dead player from the scene
+            Destroy(gameObject);
         }
-        else if (allPlayers.Count == 0)
+        else
         {
-            // If both players die, restart the level
-            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+            CheckForRespawn();
         }
 
-        yield break; //  Ensures coroutine exits properly
+        yield break;
     }
-
 }
