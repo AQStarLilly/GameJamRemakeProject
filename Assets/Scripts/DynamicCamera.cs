@@ -1,26 +1,26 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class DynamicCamera : MonoBehaviour
 {
     [Header("Camera Settings")]
     public Transform player;  // The main player
-    private Transform clone;  // The cloned player (if any)
+    private List<Transform> clones = new List<Transform>(); //  List to track multiple clones
 
-    public float zoomOutMultiplier = 1.5f;  // Controls zoom
-    public float followSpeed = 5f;          // Follow smoothness
-    public float zoomSpeed = 5f;            // Zoom smoothness
-    public Vector3 cameraOffset = new Vector3(0, 3, -5);  // Distance from the player
+    public float zoomOutMultiplier = 1.5f;
+    public float followSpeed = 5f;
+    public float zoomSpeed = 5f;
+    public Vector3 cameraOffset = new Vector3(0, 3, -5);
 
     private Camera cam;
     private float defaultZoom;
-    private Vector3 initialOffset; // Stores initial offset from player
-    private Quaternion initialRotation; // Stores the original rotation of the camera
+    private Vector3 initialOffset;
+    private Quaternion initialRotation;
 
     private void Start()
     {
         cam = GetComponent<Camera>();
 
-        //  Save the initial camera offset & rotation from the scene
         if (player != null)
         {
             initialOffset = transform.position - player.position;
@@ -35,71 +35,110 @@ public class DynamicCamera : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (player == null) return; // Ensure the player exists
+        if (player == null) return;
 
-        //  If the current player is frozen, switch to the other character
+        //  If the current player is frozen, switch to another active one
         if (player.GetComponent<PlayerController>()?.IsFrozen() == true)
         {
             SwitchToNewTarget(GetRemainingActivePlayer());
         }
 
         Vector3 targetPosition;
+        float distance = 0f;
 
-        if (clone != null && !clone.GetComponent<PlayerController>().IsFrozen())
+        if (clones.Count > 0)
         {
-            //  Get the midpoint between the player & clone
-            Vector3 midpoint = (player.position + clone.position) / 2f;
+            Vector3 averagePosition = player.position;
 
-            //  Move the camera to follow the midpoint while keeping its original offset
-            targetPosition = midpoint + initialOffset;
+            //  Calculate midpoint between player & clones
+            foreach (Transform clone in clones)
+            {
+                if (clone != null)
+                {
+                    averagePosition += clone.position;
+                }
+            }
+            averagePosition /= (clones.Count + 1); //  Average position between all players
 
-            //  Adjust zoom level based on distance
-            float distance = Vector3.Distance(player.position, clone.position);
-            cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, defaultZoom + distance * zoomOutMultiplier, Time.deltaTime * zoomSpeed);
+            targetPosition = averagePosition + initialOffset;
+
+            //  Adjust zoom based on distance to farthest clone
+            foreach (Transform clone in clones)
+            {
+                if (clone != null)
+                {
+                    float cloneDistance = Vector3.Distance(player.position, clone.position);
+                    if (cloneDistance > distance)
+                    {
+                        distance = cloneDistance;
+                    }
+                }
+            }
+
+            float targetZoom = Mathf.Clamp(defaultZoom + (distance * zoomOutMultiplier), 7f, 20f);
+
+            if (cam.orthographic)
+            {
+                cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, targetZoom, Time.deltaTime * zoomSpeed);
+            }
         }
         else
         {
-            //  Follow the player normally while keeping its original offset
             targetPosition = player.position + initialOffset;
 
-            //  Reset zoom when no clone exists
             if (cam.orthographic)
             {
                 cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, defaultZoom, Time.deltaTime * zoomSpeed);
             }
         }
 
-        //  Move the camera smoothly to the target position while maintaining original rotation
         transform.position = Vector3.Lerp(transform.position, targetPosition, Time.deltaTime * followSpeed);
-        transform.rotation = initialRotation; // Ensures the camera never rotates
+        transform.rotation = initialRotation;
     }
 
-    //  Switches camera to a new player when one dies/freezes
     public void SwitchToNewTarget(Transform newTarget)
     {
         if (newTarget != null)
         {
-            player = newTarget; // Set the new player as the camera's target
-            clone = null; // Remove the clone reference to prevent midpoint tracking
+            player = newTarget;
+            clones.Clear();
         }
     }
 
-    //  Finds the last remaining active (non-frozen) player
     private Transform GetRemainingActivePlayer()
     {
         foreach (PlayerController pc in FindObjectsOfType<PlayerController>())
         {
-            if (!pc.IsFrozen()) //  Ignore frozen players
+            if (!pc.IsFrozen())
             {
                 return pc.transform;
             }
         }
-        return null; // If no active player remains, return null
+        return null;
     }
 
     //  Called when a clone is created
     public void SetClone(Transform newClone)
     {
-        clone = newClone;
+        if (!clones.Contains(newClone))
+        {
+            clones.Add(newClone);
+        }
+    }
+
+    //  NEW: Called when multiple clones are created
+    public void UpdateCloneTracking()
+    {
+        clones.Clear(); //  Reset the clone list
+
+        //  Find all active clones
+        foreach (PlayerController pc in FindObjectsOfType<PlayerController>())
+        {
+            if (pc.CompareTag("PlayerClone") && !pc.IsFrozen())
+            {
+                clones.Add(pc.transform);
+            }
+        }
     }
 }
+

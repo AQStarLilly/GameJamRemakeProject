@@ -105,9 +105,25 @@ public class PlayerController : MonoBehaviour
     {
         return Physics.CheckSphere(groundCheck.position, groundCheckRadius, groundLayer);
     }
+
     public bool IsFrozen()
     {
         return isDead;
+    }
+
+    public void ResetFrozenState()
+    {
+        isDead = false; //  Make sure the player is active
+        GetComponent<Rigidbody>().isKinematic = false; //  Restore movement
+
+        Renderer rend = GetComponent<Renderer>();
+        if (rend != null)
+        {
+            rend.material.color = Color.white; //  Reset color to default
+        }
+
+        //  Ensure movement input is re-enabled
+        inputActions.Player.Enable();
     }
 
     public static int GetActivePlayerCount()
@@ -160,11 +176,11 @@ public class PlayerController : MonoBehaviour
             yield return null;
         }
 
-        // Remove this player from the active list
+        //  Remove this player from the active list
         allPlayers.Remove(this);
 
-        //  Reactivate clone plates if only one player remains
-        ClonePlate.ResetCloneAvailability();
+        //  Ensure clone plates reactivate if the player is dead
+        ClonePlate.HandleCloneDeath(gameObject);
 
         //  If only a clone is left, promote it to the main player
         if (allPlayers.Count == 1 && allPlayers[0].CompareTag("PlayerClone"))
@@ -263,7 +279,7 @@ public class PlayerController : MonoBehaviour
         PlayerController playerScript = player.GetComponent<PlayerController>();
         if (playerScript != null && allPlayers.Contains(playerScript))
         {
-            allPlayers.Remove(playerScript);
+            allPlayers.Remove(playerScript);           
         }
     }
 
@@ -291,7 +307,7 @@ public class PlayerController : MonoBehaviour
         allPlayers.Remove(this);
 
         //  Reactivate clone plates if only one player remains
-        ClonePlate.ResetCloneAvailability();
+        ClonePlate.HandleCloneDeath(gameObject);
 
         //  If only one player is left, switch control
         if (allPlayers.Count == 1)
@@ -312,4 +328,5 @@ public class PlayerController : MonoBehaviour
 
         yield break; //  Ensures coroutine exits properly
     }
+
 }
