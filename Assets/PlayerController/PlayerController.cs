@@ -316,7 +316,7 @@ public class PlayerController : MonoBehaviour
 
     private IEnumerator DieInstantly()
     {
-        isDead = true;
+        isDead = true; 
 
         //  Change color to indicate they were vaporized
         Renderer rend = GetComponent<Renderer>();
