@@ -3,13 +3,13 @@ using UnityEngine;
 
 public class BulletPool : MonoBehaviour
 {
-    public static BulletPool Instance; // Singleton for easy access
+    public static BulletPool Instance; // Singleton reference
 
-    [Header("Pool Settings")]
-    public GameObject bulletPrefab;   //  Assign bullet prefab in Inspector
-    public int poolSize = 10;         //  Number of bullets to keep in pool
+    [Header("Bullet Pool Settings")]
+    public GameObject bulletPrefab; // Bullet prefab to instantiate
+    public int poolSize = 20; // Number of bullets in the pool
 
-    private Queue<GameObject> bulletPool = new Queue<GameObject>();
+    private Queue<GameObject> bulletPool = new Queue<GameObject>(); // Bullet queue
 
     private void Awake()
     {
@@ -23,35 +23,41 @@ public class BulletPool : MonoBehaviour
             return;
         }
 
-        FillPool();
-    }
-
-    private void FillPool()
-    {
+        //  Initialize the bullet pool
         for (int i = 0; i < poolSize; i++)
         {
             GameObject bullet = Instantiate(bulletPrefab);
-            bullet.SetActive(false); //  Hide bullet initially
+            bullet.SetActive(false); //  Deactivate bullet before adding to pool
             bulletPool.Enqueue(bullet);
         }
     }
 
+    //  Get a bullet from the pool
     public GameObject GetBullet()
     {
-        if (bulletPool.Count == 0) //  If pool is empty, create a new bullet
+        if (bulletPool.Count > 0)
         {
-            GameObject newBullet = Instantiate(bulletPrefab);
-            return newBullet;
+            GameObject bullet = bulletPool.Dequeue();
+            bullet.SetActive(true); //  Activate bullet when taken from pool
+            return bullet;
         }
-
-        GameObject bullet = bulletPool.Dequeue();
-        bullet.SetActive(true);
-        return bullet;
+        else
+        {
+            Debug.LogWarning("Bullet pool is empty! Instantiating a new bullet.");
+            return Instantiate(bulletPrefab); // If pool is empty, create a new bullet
+        }
     }
 
+    //  Return bullet to pool instead of destroying it
     public void ReturnBullet(GameObject bullet)
     {
-        bullet.SetActive(false);
-        bulletPool.Enqueue(bullet);
+        if (bullet == null)
+        {
+            Debug.LogWarning("Tried to return a null bullet to the pool!");
+            return;
+        }
+
+        bullet.SetActive(false); //  Ensure bullet is disabled
+        bulletPool.Enqueue(bullet); //  Add it back to the pool
     }
 }
