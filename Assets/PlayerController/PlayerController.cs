@@ -23,6 +23,9 @@ public class PlayerController : MonoBehaviour
     private static List<PlayerController> allPlayers = new List<PlayerController>(); // Stores all active players
     private static DynamicCamera cameraScript; // Reference to the camera script
 
+    private AudioSource footstepAudio; //  Footstep audio source
+    private bool isMoving = false; //  Tracks movement state
+
     private void Awake()
     {
         inputActions = new PlayerInputActions();
@@ -55,6 +58,8 @@ public class PlayerController : MonoBehaviour
         rb = GetComponent<Rigidbody>();
         rb.constraints = RigidbodyConstraints.FreezeRotation;
 
+        footstepAudio = GetComponent<AudioSource>();
+
         // Assign camera reference if it hasn't been set yet
         if (cameraScript == null)
         {
@@ -77,6 +82,23 @@ public class PlayerController : MonoBehaviour
         // Apply movement in world space.
         Vector3 move = new Vector3(moveInput.x, 0f, moveInput.y);
         rb.MovePosition(rb.position + move * speed * Time.fixedDeltaTime);
+
+        //  Play/Stop Footstep Sound Based on Movement
+        bool isCurrentlyMoving = moveInput != Vector2.zero && IsGrounded();
+
+        if (isCurrentlyMoving && !isMoving)
+        {
+            if (!footstepAudio.isPlaying)
+            {
+                footstepAudio.Play();
+            }
+            isMoving = true;
+        }
+        else if (!isCurrentlyMoving && isMoving)
+        {
+            footstepAudio.Stop();
+            isMoving = false;
+        }
 
         // Check if the jump input was triggered and the player is grounded.
         if (jumpRequested && IsGrounded())
